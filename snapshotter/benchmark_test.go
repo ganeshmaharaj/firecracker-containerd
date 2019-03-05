@@ -35,6 +35,7 @@ import (
 
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/devmapper"
 	"github.com/firecracker-microvm/firecracker-containerd/snapshotter/naive"
+	lvms "github.com/ganeshmaharaj/lvm-snapshotter/lvmsnapshotter"
 )
 
 var (
@@ -42,6 +43,8 @@ var (
 	dmRootPath      string
 	overlayRootPath string
 	naiveRootPath   string
+	lvmvg           string
+	lvmtpool        string
 )
 
 func init() {
@@ -49,6 +52,8 @@ func init() {
 	flag.StringVar(&dmRootPath, "dm.rootPath", "", "Root dir for devmapper snapshotter")
 	flag.StringVar(&overlayRootPath, "overlay.rootPath", "", "Root dir for overlay snapshotter")
 	flag.StringVar(&naiveRootPath, "naive.rootPath", "", "Root dir for naive snapshotter")
+	flag.StringVar(&lvmvg, "lvm.vg", "", "VG Name of LVM backend")
+	flag.StringVar(&lvmtpool, "lvm.lvt", "", "LV Thin pool in LVM backend")
 	// Avoid mixing benchmark output and INFO messages
 	logrus.SetLevel(logrus.ErrorLevel)
 }
@@ -85,6 +90,22 @@ func BenchmarkOverlay(b *testing.B) {
 		assert.NoError(b, err)
 
 		err = os.RemoveAll(overlayRootPath)
+		assert.NoError(b, err)
+	}()
+
+	benchmarkSnapshotter(b, snapshotter)
+}
+
+func BenchmarkLVM(b *testing.B) {
+	if lvmvg == "" || lvmtpool == "" {
+		b.Skip("LVM snapshotter requires sock file, volume group and lv thin pool in advance")
+	}
+
+	snapshotter, err := lvms.NewSnapshotter(lvmvg, lvmtpool)
+	require.NoError(b, err)
+
+	defer func() {
+		err := snapshotter.Close()
 		assert.NoError(b, err)
 	}()
 
